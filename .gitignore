@@ -1,0 +1,44 @@
+# ----- Dépendances -----
+node_modules/
+.pnpm-store/
+
+# ----- Builds -----
+dist/
+build/
+.next/
+out/
+
+# ----- Variables d'environnement (CRITIQUE !) -----
+.env
+.env.local
+.env.production
+.env.development
+backend/.env
+frontend/.env.local
+
+# ----- IDE & OS -----
+.vscode/*
+!.vscode/settings.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# ----- Logs -----
+*.log
+npm-debug.log*
+yarn-debug.log*
+
+# ----- TypeScript -----
+*.tsbuildinfo
+next-env.d.ts
+
+# ----- Tests -----
+coverage/
+
+# ----- Prisma -----
+backend/prisma/migrations/dev.db*
+*.db-journal
+
+# ----- Caches -----
+.turbo
+.cache/

@@ -1,0 +1,732 @@
+// OptiIA — Schéma Prisma
+// Multi-tenant via tenantId sur toutes les tables métier
+// Extension pgvector activée pour la recherche sémantique catalogue
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [pgcrypto]
+}
+
+// ============================================================
+// TENANTS & USERS
+// ============================================================
+
+model Tenant {
+  id        String  @id @default(cuid())
+  name      String
+  legalName String?
+  vatNumber String?
+  locale    String  @default("fr-FR")
+  currency  String  @default("EUR")
+  timezone  String  @default("Europe/Paris")
+  brandTone String? // pour génération marketing (ex: "moderne, chaleureux")
+  logoUrl   String?
+
+  subscription    Subscription?
+  aiQuota         AiQuota?
+  stores          Store[]
+  users           User[]
+  clients         Client[]
+  products        Product[]
+  prescriptions   Prescription[]
+  sales           Sale[]
+  appointments    Appointment[]
+  aiConversations AiConversation[]
+  aiCallLogs      AiCallLog[]
+  consents        Consent[]
+  auditLogs       AuditLog[]
+
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  deletedAt     DateTime?
+  ClientInsight ClientInsight[]
+
+  @@index([deletedAt])
+}
+
+model Store {
+  id           String  @id @default(cuid())
+  tenantId     String
+  tenant       Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name         String
+  addressLine1 String?
+  addressLine2 String?
+  postalCode   String?
+  city         String?
+  country      String? @default("FR")
+  phone        String?
+  email        String?
+  openingHours Json?
+
+  users        UserStore[]
+  clients      Client[]
+  sales        Sale[]
+  appointments Appointment[]
+  stockItems   StockItem[]
+  insights     ClientInsight[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+}
+
+enum UserRole {
+  OWNER
+  ADMIN
+  OPTICIAN
+  EMPLOYEE
+}
+
+model User {
+  id              String           @id @default(cuid())
+  tenantId        String
+  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  email           String
+  passwordHash    String
+  firstName       String
+  lastName        String
+  role            UserRole         @default(EMPLOYEE)
+  isActive        Boolean          @default(true)
+  lastLoginAt     DateTime?
+  // Pour opticiens diplômés (peuvent valider une ordonnance)
+  rppsNumber      String?
+  stores          UserStore[]
+  refreshTokens   RefreshToken[]
+  aiConversations AiConversation[]
+  auditLogs       AuditLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, email])
+  @@index([tenantId, role])
+}
+
+model UserStore {
+  userId  String
+  storeId String
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@id([userId, storeId])
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+// ============================================================
+// CLIENTS
+// ============================================================
+
+model Client {
+  id       String  @id @default(cuid())
+  tenantId String
+  tenant   Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  storeId  String?
+  store    Store?  @relation(fields: [storeId], references: [id])
+
+  firstName    String
+  lastName     String
+  email        String?
+  phone        String?
+  birthDate    DateTime?
+  gender       String?
+  addressLine1 String?
+  postalCode   String?
+  city         String?
+
+  // Préférences observées (mises à jour par job IA)
+  preferredBrands     String[] @default([])
+  preferredFrameStyle String?
+  preferredFrameColor String?
+  averageBudget       Decimal? @db.Decimal(10, 2)
+  notes               String?  @db.Text
+  tags                String[] @default([])
+
+  // CRM dérivé (mis à jour par triggers/jobs)
+  totalLifetimeSpend Decimal   @default(0) @db.Decimal(10, 2)
+  lastVisitAt        DateTime?
+  marketingConsent   Boolean   @default(false)
+  marketingConsentAt DateTime?
+  locale             String    @default("fr-FR")
+
+  prescriptions Prescription[]
+  sales         Sale[]
+  appointments  Appointment[]
+  documents     ClientDocument[]
+  consents      Consent[]
+  insights      ClientInsight[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@unique([tenantId, email])
+  @@index([tenantId, storeId])
+  @@index([tenantId, lastName, firstName])
+  @@index([deletedAt])
+}
+
+// Cache des résumés IA et insights — versionnable par "kind"
+model ClientInsight {
+  id            String    @id @default(cuid())
+  tenantId      String
+  tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  clientId      String
+  client        Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  kind          String // "summary" | "preferences" | ...
+  payload       Json
+  promptVersion String?
+  generatedAt   DateTime  @default(now())
+  expiresAt     DateTime?
+  Store         Store?    @relation(fields: [storeId], references: [id])
+  storeId       String?
+
+  @@index([tenantId, clientId, kind, generatedAt])
+  @@index([expiresAt])
+}
+
+model ClientDocument {
+  id         String   @id @default(cuid())
+  clientId   String
+  client     Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  type       String // "ID_CARD" | "INSURANCE" | "OTHER"
+  fileName   String
+  s3Key      String
+  mimeType   String
+  sizeBytes  Int
+  uploadedAt DateTime @default(now())
+
+  @@index([clientId])
+}
+
+// RGPD — consentements
+model Consent {
+  id        String    @id @default(cuid())
+  tenantId  String
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  clientId  String?
+  client    Client?   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  purpose   String // "MARKETING_EMAIL" | "MARKETING_SMS" | "ANALYTICS" | "AI_TRAINING_OPTIN"
+  granted   Boolean
+  ipAddress String?
+  userAgent String?
+  grantedAt DateTime  @default(now())
+  revokedAt DateTime?
+
+  @@index([clientId, purpose])
+  @@index([tenantId, purpose])
+}
+
+// ============================================================
+// PRESCRIPTIONS (ORDONNANCES)
+// ============================================================
+
+enum PrescriptionType {
+  GLASSES
+  CONTACT_LENSES
+  EXAM
+}
+
+enum PrescriptionStatus {
+  DRAFT
+  PROCESSING // OCR en cours
+  PENDING_REVIEW // OCR terminé, à valider
+  VALIDATED
+  ARCHIVED
+}
+
+model Prescription {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  type   PrescriptionType
+  status PrescriptionStatus @default(DRAFT)
+
+  // Praticien
+  doctorName String?
+  doctorRpps String?
+  issuedAt   DateTime?
+  validUntil DateTime?
+
+  // Œil droit (OD)
+  odSphere   Decimal? @db.Decimal(5, 2)
+  odCylinder Decimal? @db.Decimal(5, 2)
+  odAxis     Int?
+  odAddition Decimal? @db.Decimal(5, 2)
+  odPrism    Decimal? @db.Decimal(5, 2)
+  odBase     String?
+
+  // Œil gauche (OG)
+  ogSphere   Decimal? @db.Decimal(5, 2)
+  ogCylinder Decimal? @db.Decimal(5, 2)
+  ogAxis     Int?
+  ogAddition Decimal? @db.Decimal(5, 2)
+  ogPrism    Decimal? @db.Decimal(5, 2)
+  ogBase     String?
+
+  pupillaryDistance Decimal? @db.Decimal(4, 1)
+
+  // Source
+  imageS3Key    String?
+  ocrConfidence Decimal? @db.Decimal(3, 2)
+  ocrWarnings   String[] @default([])
+  validatedById String?
+
+  notes String? @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId, clientId])
+  @@index([status])
+}
+
+// ============================================================
+// PRODUCTS & STOCK
+// ============================================================
+
+enum ProductCategory {
+  FRAME
+  LENS
+  CONTACT_LENS
+  ACCESSORY
+  SOLUTION
+}
+
+model Product {
+  id          String          @id @default(cuid())
+  tenantId    String
+  tenant      Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sku         String
+  ean         String?
+  name        String
+  brand       String?
+  category    ProductCategory
+  subcategory String? // "sun", "optical", "kids" pour FRAME ; "progressive", "single_vision" pour LENS
+  description String?         @db.Text
+  imageUrl    String?
+
+  // Prix
+  costPriceHt  Decimal? @db.Decimal(10, 2)
+  sellPriceTtc Decimal  @db.Decimal(10, 2)
+  vatRate      Decimal  @default(20.0) @db.Decimal(4, 2)
+
+  // Attributs montures
+  frameMaterial String?
+  frameColor    String?
+  frameShape    String?
+  frameSize     String?
+
+  // Attributs verres
+  lensIndex     Decimal? @db.Decimal(3, 2) // 1.50, 1.60, 1.67, 1.74
+  lensTreatment String[] @default([]) // ["AR", "BLUE_LIGHT", "PHOTOCHROMIC"]
+
+  isActive     Boolean   @default(true)
+  reorderPoint Int       @default(2)
+  metadata     Json? // attributs additionnels libres (supportsHighIndex, weight…)
+  supplierId   String?
+  supplier     Supplier? @relation(fields: [supplierId], references: [id])
+
+  // Embedding pour recherche sémantique (recommandation)
+  // embedding   Unsupported("vector(1536)")?  // décommenter après extension pgvector
+
+  stockItems StockItem[]
+  saleItems  SaleItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, sku])
+  @@index([tenantId, category])
+  @@index([tenantId, brand])
+}
+
+model Supplier {
+  id             String          @id @default(cuid())
+  tenantId       String
+  name           String
+  email          String?
+  phone          String?
+  leadTimeDays   Int             @default(14)
+  edidIdentifier String? // pour intégration EDI
+  products       Product[]
+  purchaseOrders PurchaseOrder[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+}
+
+model StockItem {
+  id           String          @id @default(cuid())
+  tenantId     String
+  productId    String
+  product      Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  storeId      String
+  store        Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  quantity     Int             @default(0)
+  reorderPoint Int             @default(2)
+  reorderQty   Int             @default(5)
+  movements    StockMovement[]
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([productId, storeId])
+  @@index([tenantId, storeId])
+}
+
+enum StockMovementType {
+  RECEIPT // entrée fournisseur
+  SALE // sortie vente
+  RETURN // retour client
+  ADJUSTMENT // inventaire
+  TRANSFER // entre boutiques
+  LOSS // casse, vol
+}
+
+model StockMovement {
+  id          String            @id @default(cuid())
+  stockItemId String
+  stockItem   StockItem         @relation(fields: [stockItemId], references: [id], onDelete: Cascade)
+  type        StockMovementType
+  quantity    Int // signé : +n entrée, -n sortie
+  reference   String? // ex : id de vente, BC fournisseur
+  reason      String?
+  userId      String?
+  createdAt   DateTime          @default(now())
+
+  @@index([stockItemId, createdAt])
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  SENT
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CANCELLED
+}
+
+model PurchaseOrder {
+  id            String              @id @default(cuid())
+  tenantId      String
+  reference     String
+  supplierId    String
+  supplier      Supplier            @relation(fields: [supplierId], references: [id])
+  status        PurchaseOrderStatus @default(DRAFT)
+  totalHt       Decimal             @db.Decimal(10, 2)
+  generatedByAi Boolean             @default(false)
+  items         PurchaseOrderItem[]
+
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  sentAt     DateTime?
+  receivedAt DateTime?
+
+  @@unique([tenantId, reference])
+  @@index([tenantId, status])
+}
+
+model PurchaseOrderItem {
+  id              String        @id @default(cuid())
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  productId       String
+  quantity        Int
+  unitPriceHt     Decimal       @db.Decimal(10, 2)
+}
+
+// ============================================================
+// SALES (devis → commandes → factures)
+// ============================================================
+
+enum SaleStatus {
+  QUOTE // devis
+  PENDING // en cours (montage)
+  READY // prêt à être retiré
+  DELIVERED // livré
+  CANCELLED
+}
+
+model Sale {
+  id             String  @id @default(cuid())
+  tenantId       String
+  tenant         Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  storeId        String
+  store          Store   @relation(fields: [storeId], references: [id])
+  clientId       String
+  client         Client  @relation(fields: [clientId], references: [id])
+  prescriptionId String?
+
+  reference String
+  status    SaleStatus @default(QUOTE)
+
+  subtotalHt Decimal @db.Decimal(10, 2)
+  vatAmount  Decimal @db.Decimal(10, 2)
+  totalTtc   Decimal @db.Decimal(10, 2)
+  paidAmount Decimal @default(0) @db.Decimal(10, 2)
+
+  // Tiers payants (CPAM + mutuelle)
+  cpamAmount   Decimal? @db.Decimal(10, 2)
+  mutualAmount Decimal? @db.Decimal(10, 2)
+
+  items    SaleItem[]
+  payments Payment[]
+  invoice  Invoice?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deliveredAt DateTime?
+
+  @@unique([tenantId, reference])
+  @@index([tenantId, clientId, createdAt])
+  @@index([tenantId, status])
+  @@index([tenantId, storeId, createdAt])
+}
+
+model SaleItem {
+  id               String   @id @default(cuid())
+  saleId           String
+  sale             Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  productId        String?
+  product          Product? @relation(fields: [productId], references: [id])
+  description      String // pour items custom
+  quantity         Int      @default(1)
+  unitPriceHt      Decimal  @db.Decimal(10, 2)
+  vatRate          Decimal  @db.Decimal(4, 2)
+  discountPct      Decimal  @default(0) @db.Decimal(5, 2)
+  totalHt          Decimal  @db.Decimal(10, 2)
+  totalTtc         Decimal  @db.Decimal(10, 2)
+  // Pour verres : ordonnance attachée
+  prescriptionData Json?
+
+  @@index([saleId])
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  CHECK
+  TRANSFER
+  CPAM
+  MUTUAL
+  OTHER
+}
+
+model Payment {
+  id         String        @id @default(cuid())
+  saleId     String
+  sale       Sale          @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  method     PaymentMethod
+  amount     Decimal       @db.Decimal(10, 2)
+  reference  String?
+  receivedAt DateTime      @default(now())
+
+  @@index([saleId])
+}
+
+model Invoice {
+  id       String   @id @default(cuid())
+  saleId   String   @unique
+  sale     Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  number   String
+  pdfS3Key String?
+  issuedAt DateTime @default(now())
+
+  @@index([number])
+}
+
+// ============================================================
+// APPOINTMENTS
+// ============================================================
+
+enum AppointmentStatus {
+  SCHEDULED
+  CONFIRMED
+  COMPLETED
+  NO_SHOW
+  CANCELLED
+}
+
+enum AppointmentType {
+  EXAM
+  FITTING // ajustement monture
+  PICKUP // retrait commande
+  CONSULTATION
+  OTHER
+}
+
+model Appointment {
+  id            String            @id @default(cuid())
+  tenantId      String
+  tenant        Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  storeId       String
+  store         Store             @relation(fields: [storeId], references: [id])
+  clientId      String
+  client        Client            @relation(fields: [clientId], references: [id])
+  userId        String? // employé/opticien assigné
+  type          AppointmentType
+  status        AppointmentStatus @default(SCHEDULED)
+  startsAt      DateTime
+  endsAt        DateTime
+  notes         String?           @db.Text
+  remindersSent Json? // historique rappels { sms_24h: true, email_1h: true }
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId, storeId, startsAt])
+  @@index([clientId, startsAt])
+}
+
+// ============================================================
+// AI MODULE
+// ============================================================
+
+model AiQuota {
+  id              String   @id @default(cuid())
+  tenantId        String   @unique
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  monthlyLimit    Int
+  monthlyUsed     Int      @default(0)
+  monthResetAt    DateTime
+  dailyUsdSpent   Decimal  @default(0) @db.Decimal(10, 4)
+  dailyResetAt    DateTime
+  hardDailyUsdCap Decimal  @default(20) @db.Decimal(10, 2)
+  updatedAt       DateTime @updatedAt
+}
+
+model AiConversation {
+  id       String      @id @default(cuid())
+  tenantId String
+  tenant   Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  storeId  String?
+  feature  String // "chat" | "recommendation" | ...
+  title    String?
+  metadata Json?
+  messages AiMessage[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId, userId, createdAt])
+  @@index([feature, createdAt])
+}
+
+model AiMessage {
+  id               String         @id @default(cuid())
+  tenantId         String
+  conversationId   String
+  conversation     AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role             String // "system" | "user" | "assistant" | "tool"
+  content          String?        @db.Text
+  toolCalls        Json?
+  toolCallId       String?
+  promptTokens     Int?
+  completionTokens Int?
+  costUsd          Decimal?       @db.Decimal(10, 6)
+  toolCallsCount   Int            @default(0)
+  model            String?
+  createdAt        DateTime       @default(now())
+
+  @@index([conversationId, createdAt])
+  @@index([tenantId, createdAt])
+}
+
+model AiCallLog {
+  id               String   @id @default(cuid())
+  tenantId         String
+  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId           String?
+  feature          String
+  model            String
+  promptTokens     Int
+  completionTokens Int
+  costUsd          Decimal  @db.Decimal(10, 6)
+  latencyMs        Int
+  success          Boolean
+  errorCode        String?
+  promptVersion    String?
+  createdAt        DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+  @@index([feature, createdAt])
+}
+
+// ============================================================
+// BILLING (Stripe)
+// ============================================================
+
+enum SubscriptionPlan {
+  STARTER
+  PRO
+  PREMIUM
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+  EXPIRED
+}
+
+model Subscription {
+  id                   String             @id @default(cuid())
+  tenantId             String             @unique
+  tenant               Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  stripeCustomerId     String?            @unique
+  stripeSubscriptionId String?            @unique
+  plan                 SubscriptionPlan
+  status               SubscriptionStatus
+  currentPeriodEnd     DateTime?
+  trialEnd             DateTime?
+  cancelledAt          DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ============================================================
+// AUDIT & SYSTEM
+// ============================================================
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  tenantId   String
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id])
+  action     String // "client.delete", "prescription.update", ...
+  entityType String
+  entityId   String
+  diff       Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+  @@index([entityType, entityId])
+}
