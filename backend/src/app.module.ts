@@ -4,7 +4,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
-import { BullModule } from '@nestjs/bullmq';
+// import { BullModule } from '@nestjs/bullmq';
 
 import { PrismaModule } from './common/prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
@@ -24,9 +24,9 @@ import { configValidationSchema } from './config/validation';
       { name: 'short', ttl: 1000, limit: 10 },
       { name: 'medium', ttl: 60_000, limit: 60 },
     ]),
-    BullModule.forRoot({
-      connection: { url: process.env.REDIS_URL },
-    }),
+    // BullModule.forRoot({
+    //   connection: { url: process.env.REDIS_URL },
+    // }),
     PrismaModule,
     AuthModule,
     TenantsModule,

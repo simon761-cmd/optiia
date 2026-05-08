@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { BullModule } from '@nestjs/bullmq';
+// import { BullModule } from '@nestjs/bullmq';
 
 import { AiController } from './ai.controller';
 import { LlmService } from './llm.service';
@@ -18,11 +18,11 @@ import { ToolRegistry } from './tools/tool-registry';
 @Module({
   imports: [
     ConfigModule,
-    BullModule.registerQueue(
-      { name: 'ai-ocr' },
-      { name: 'ai-stock-prediction' },
-      { name: 'ai-marketing' },
-    ),
+    // BullModule.registerQueue(
+    //   { name: 'ai-ocr' },
+    //   { name: 'ai-stock-prediction' },
+    //   { name: 'ai-marketing' },
+    // ),
   ],
   controllers: [AiController],
   providers: [
