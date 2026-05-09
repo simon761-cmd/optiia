@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 
 import { api, ApiError } from '@/lib/api';
+import { NewClientModal } from '@/components/clients/NewClientModal';
 
 interface Client {
   id: string;
@@ -33,6 +34,8 @@ interface ClientsResponse {
 
 export default function ClientsPage() {
   const router = useRouter();
+  const [newClientOpen, setNewClientOpen] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [clients, setClients] = useState<Client[]>([]);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -78,7 +81,7 @@ export default function ClientsPage() {
     return () => {
       cancelled = true;
     };
-  }, [debouncedSearch]);
+  }, [debouncedSearch, refreshKey]);
 
   const computeAge = (birthDate: string | null) => {
     if (!birthDate) return null;
@@ -104,7 +107,7 @@ export default function ClientsPage() {
         <button
           type="button"
           className="flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700"
-          onClick={() => alert('Création client : à venir dans la prochaine session')}
+          onClick={() => setNewClientOpen(true)}
         >
           <UserPlus className="h-4 w-4" />
           Nouveau client
@@ -225,6 +228,12 @@ export default function ClientsPage() {
           </table>
         )}
       </div>
+
+      <NewClientModal
+        open={newClientOpen}
+        onClose={() => setNewClientOpen(false)}
+        onCreated={() => setRefreshKey((k) => k + 1)}
+      />
     </div>
   );
 }
