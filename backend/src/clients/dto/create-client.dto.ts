@@ -1,5 +1,6 @@
 import {
   IsArray,
+  IsBoolean,
   IsDateString,
   IsEmail,
   IsIn,
@@ -41,4 +42,10 @@ export class CreateClientDto {
 
   @IsOptional() @IsArray() @IsString({ each: true })
   tags?: string[];
+
+  @IsOptional() @IsBoolean()
+  marketingConsent?: boolean;
+
+  @IsOptional() @IsDateString()
+  marketingConsentAt?: string;
 }
