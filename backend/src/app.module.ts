@@ -12,6 +12,7 @@ import { TenantsModule } from './tenants/tenants.module';
 import { ClientsModule } from './clients/clients.module';
 import { PrescriptionsModule } from './prescriptions/prescriptions.module';
 import { AiModule } from './ai/ai.module';
+import { ProductsModule } from './products/products.module';
 import { configValidationSchema } from './config/validation';
 
 @Module({
@@ -32,6 +33,7 @@ import { configValidationSchema } from './config/validation';
     TenantsModule,
     ClientsModule,
     SalesModule,
+    ProductsModule,
     DashboardModule,
      PrescriptionsModule,
     AiModule,

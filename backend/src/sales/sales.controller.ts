@@ -1,12 +1,18 @@
-import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser, AuthUser } from '../common/decorators/current-user.decorator';
 import { SalesService } from './sales.service';
+import { CreateSaleDto } from './dto/create-sale.dto';
 
 @Controller({ path: 'sales', version: '1' })
 @UseGuards(JwtAuthGuard)
 export class SalesController {
   constructor(private readonly sales: SalesService) {}
+
+  @Post()
+  create(@CurrentUser() user: AuthUser, @Body() dto: CreateSaleDto) {
+    return this.sales.create(user.tenantId, user.userId, undefined, dto);
+  }
 
   @Get('stats')
   getStats(@CurrentUser() user: AuthUser, @Query('storeId') storeId?: string) {

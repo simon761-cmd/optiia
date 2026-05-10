@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { CreateSaleDto } from './dto/create-sale.dto';
 
 export interface ListSalesParams {
   tenantId: string;
@@ -107,5 +108,83 @@ export class SalesService {
     });
     if (!sale) throw new NotFoundException('Vente introuvable');
     return sale;
+  }
+
+  async create(tenantId: string, _userId: string, storeId: string | undefined, dto: CreateSaleDto) {
+    const client = await this.prisma.client.findFirst({
+      where: { id: dto.clientId, tenantId, deletedAt: null },
+    });
+    if (!client) throw new NotFoundException('Client introuvable');
+
+    const productIds = dto.items.map((i) => i.productId);
+    const products = await this.prisma.product.findMany({
+      where: { id: { in: productIds }, tenantId },
+    });
+    if (products.length !== productIds.length) {
+      throw new NotFoundException('Un ou plusieurs produits introuvables');
+    }
+    const productMap = new Map(products.map((p) => [p.id, p]));
+
+    let subtotalHt = 0;
+    let totalTtc = 0;
+    const itemsToCreate: any[] = [];
+
+    for (const item of dto.items) {
+      const product = productMap.get(item.productId)!;
+      const sellTtc = Number(product.sellPriceTtc);
+      const vatRate = Number(product.vatRate);
+      const unitPriceHt = sellTtc / (1 + vatRate / 100);
+      const lineHt = unitPriceHt * item.quantity;
+      const lineTtc = sellTtc * item.quantity;
+
+      subtotalHt += lineHt;
+      totalTtc += lineTtc;
+
+      itemsToCreate.push({
+        productId: product.id,
+        description: `${product.brand ?? ''} ${product.name}`.trim(),
+        quantity: item.quantity,
+        unitPriceHt: unitPriceHt.toFixed(2),
+        vatRate,
+        totalHt: lineHt.toFixed(2),
+        totalTtc: lineTtc.toFixed(2),
+      });
+    }
+
+    const vatAmount = totalTtc - subtotalHt;
+
+    const year = new Date().getFullYear();
+    const prefix = `V-${year}-`;
+    const lastSale = await this.prisma.sale.findFirst({
+      where: { tenantId, reference: { startsWith: prefix } },
+      orderBy: { reference: 'desc' },
+    });
+    let nextNum = 1;
+    if (lastSale) {
+      const lastNum = parseInt(lastSale.reference.replace(prefix, ''), 10);
+      if (!isNaN(lastNum)) nextNum = lastNum + 1;
+    }
+    const reference = `${prefix}${String(nextNum).padStart(5, '0')}`;
+
+    const status = dto.status ?? 'PENDING';
+    return this.prisma.sale.create({
+      data: {
+        tenantId,
+        storeId: storeId ?? client.storeId!,
+        clientId: dto.clientId,
+        reference,
+        status,
+        subtotalHt: subtotalHt.toFixed(2),
+        vatAmount: vatAmount.toFixed(2),
+        totalTtc: totalTtc.toFixed(2),
+        paidAmount: status === 'DELIVERED' ? totalTtc.toFixed(2) : '0',
+        deliveredAt: status === 'DELIVERED' ? new Date() : null,
+        items: { create: itemsToCreate },
+      },
+      include: {
+        items: true,
+        client: { select: { id: true, firstName: true, lastName: true } },
+      },
+    });
   }
 }

@@ -14,6 +14,7 @@ import {
 import clsx from 'clsx';
 
 import { api, ApiError } from '@/lib/api';
+import { NewSaleModal } from '@/components/sales/NewSaleModal';
 
 // ----- Types -----
 
@@ -63,6 +64,8 @@ export default function SalesPage() {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [newSaleOpen, setNewSaleOpen] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // Charger stats (1 fois au montage)
   useEffect(() => {
@@ -98,7 +101,7 @@ export default function SalesPage() {
     return () => {
       cancelled = true;
     };
-  }, [statusFilter]);
+  }, [statusFilter, refreshKey]);
 
   // Filtrage local par recherche (référence client ou n° vente)
   const filteredSales = search.trim()
@@ -114,9 +117,19 @@ export default function SalesPage() {
   return (
     <div className="mx-auto max-w-6xl px-6 py-8">
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-xl font-semibold text-slate-900">Ventes</h1>
-        <p className="text-sm text-slate-500">Suivi de tes ventes et de leur statut</p>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-semibold text-slate-900">Ventes</h1>
+          <p className="text-sm text-slate-500">Suivi de tes ventes et de leur statut</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setNewSaleOpen(true)}
+          className="flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700"
+        >
+          <ShoppingBag className="h-4 w-4" />
+          Nouvelle vente
+        </button>
       </div>
 
       {/* KPIs */}
@@ -243,6 +256,12 @@ export default function SalesPage() {
           {search && ` correspondant à "${search}"`}
         </div>
       )}
+
+      <NewSaleModal
+        open={newSaleOpen}
+        onClose={() => setNewSaleOpen(false)}
+        onCreated={() => setRefreshKey((k) => k + 1)}
+      />
     </div>
   );
 }
