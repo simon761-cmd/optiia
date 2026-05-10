@@ -1,13 +1,18 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, Res, UseGuards } from '@nestjs/common';
+import type { Response } from 'express';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser, AuthUser } from '../common/decorators/current-user.decorator';
 import { SalesService } from './sales.service';
 import { CreateSaleDto } from './dto/create-sale.dto';
+import { InvoiceService } from './invoice.service';
 
 @Controller({ path: 'sales', version: '1' })
 @UseGuards(JwtAuthGuard)
 export class SalesController {
-  constructor(private readonly sales: SalesService) {}
+  constructor(
+    private readonly sales: SalesService,
+    private readonly invoices: InvoiceService,
+  ) {}
 
   @Post()
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateSaleDto) {
@@ -38,6 +43,25 @@ export class SalesController {
       limit: limit ? parseInt(limit, 10) : undefined,
       cursor,
     });
+  }
+
+  @Get(':id/invoice')
+  async downloadInvoice(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    const [pdfBuffer, sale] = await Promise.all([
+      this.invoices.generateInvoicePdf(user.tenantId, id),
+      this.sales.findOne(user.tenantId, id),
+    ]);
+
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `inline; filename="facture-${sale.reference}.pdf"`,
+      'Content-Length': pdfBuffer.length.toString(),
+    });
+    res.send(pdfBuffer);
   }
 
   @Get(':id')

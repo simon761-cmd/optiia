@@ -22,6 +22,7 @@ import {
 import clsx from 'clsx';
 
 import { api, ApiError } from '@/lib/api';
+import { downloadInvoice } from '@/lib/download-invoice';
 import { PrescriptionModal } from '@/components/prescriptions/PrescriptionModal';
 import { MarketingMessageModal } from '@/components/marketing/MarketingMessageModal';
 
@@ -316,9 +317,26 @@ function SalesTab({ sales }: { sales: Sale[] }) {
               </div>
               <div className="mt-0.5 text-xs text-slate-500">{formatDate(sale.createdAt)}</div>
             </div>
-            <div className="text-right">
-              <div className="text-base font-semibold text-slate-900">{formatEuros(Number(sale.totalTtc))} €</div>
-              <div className="text-[11px] text-slate-400">{sale.items.length} article{sale.items.length > 1 ? 's' : ''}</div>
+            <div className="flex items-start gap-3">
+              <div className="text-right">
+                <div className="text-base font-semibold text-slate-900">{formatEuros(Number(sale.totalTtc))} €</div>
+                <div className="text-[11px] text-slate-400">{sale.items.length} article{sale.items.length > 1 ? 's' : ''}</div>
+              </div>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await downloadInvoice(sale.id, 'view');
+                  } catch (err: any) {
+                    alert(`Erreur : ${err.message}`);
+                  }
+                }}
+                className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700"
+                title="Voir la facture PDF"
+              >
+                <FileText className="h-3.5 w-3.5" />
+                Facture
+              </button>
             </div>
           </div>
           <div className="mt-3 space-y-1 border-t border-slate-100 pt-3">

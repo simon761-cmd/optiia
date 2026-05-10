@@ -10,10 +10,12 @@ import {
   Wallet,
   Search,
   ChevronRight,
+  FileText,
 } from 'lucide-react';
 import clsx from 'clsx';
 
 import { api, ApiError } from '@/lib/api';
+import { downloadInvoice } from '@/lib/download-invoice';
 import { NewSaleModal } from '@/components/sales/NewSaleModal';
 
 // ----- Types -----
@@ -215,7 +217,7 @@ export default function SalesPage() {
                 <th className="px-4 py-3">Articles</th>
                 <th className="px-4 py-3">Statut</th>
                 <th className="px-4 py-3 text-right">Montant</th>
-                <th className="px-4 py-3"></th>
+                <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -239,8 +241,25 @@ export default function SalesPage() {
                   <td className="px-4 py-3 text-right text-sm font-medium text-slate-900">
                     {formatEuros(Number(sale.totalTtc))} €
                   </td>
-                  <td className="px-4 py-3 text-right">
-                    <ChevronRight className="ml-auto h-4 w-4 text-slate-300" />
+                  <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center justify-end gap-1">
+                      <button
+                        type="button"
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          try {
+                            await downloadInvoice(sale.id, 'view');
+                          } catch (err: any) {
+                            alert(`Erreur : ${err.message}`);
+                          }
+                        }}
+                        className="rounded-md p-1.5 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600"
+                        title="Voir la facture"
+                      >
+                        <FileText className="h-3.5 w-3.5" />
+                      </button>
+                      <ChevronRight className="h-4 w-4 text-slate-300" />
+                    </div>
                   </td>
                 </tr>
               ))}
