@@ -22,6 +22,7 @@ import {
 import clsx from 'clsx';
 
 import { useAuthStore } from '@/lib/auth-store';
+import { DevNoticeModal } from '@/components/landing/DevNoticeModal';
 
 export default function LandingPage() {
   const accessToken = useAuthStore((s) => s.accessToken);
@@ -29,6 +30,8 @@ export default function LandingPage() {
 
   return (
     <div className="bg-white">
+      <DevNoticeModal />
+
       <Navigation isLoggedIn={isHydrated && !!accessToken} />
       <Hero />
       <Benefits />
