@@ -12,7 +12,7 @@ const NAV_ITEMS = [
   { href: '/dashboard', label: 'Tableau de bord', icon: LayoutDashboard },
   { href: '/clients', label: 'Clients', icon: Users },
   { href: '/ventes', label: 'Ventes', icon: ShoppingBag },
-  { href: '/produits', label: 'Produits', icon: Package, disabled: true },
+  { href: '/produits', label: 'Produits', icon: Package },
   { href: '/agenda', label: 'Agenda', icon: Calendar, disabled: true },
 ];
 
