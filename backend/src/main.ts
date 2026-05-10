@@ -34,6 +34,7 @@ async function bootstrap() {
   app.useGlobalFilters(new HttpExceptionFilter());
   app.useGlobalInterceptors(new LoggingInterceptor());
 
-  await app.listen(config.get<number>('PORT') ?? 3000);
+  const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3001;
+  await app.listen(port, '0.0.0.0');
 }
 bootstrap();
