@@ -23,7 +23,7 @@ export default function SignupPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (isHydrated && accessToken) router.replace('/');
+    if (isHydrated && accessToken) router.replace('/dashboard');
   }, [isHydrated, accessToken, router]);
 
   const onSubmit = async (e: React.FormEvent) => {
@@ -41,7 +41,7 @@ export default function SignupPage() {
         refreshToken: data.refreshToken,
         user: data.user,
       });
-      router.replace('/');
+      router.replace('/dashboard');
     } catch (err: any) {
       if (err instanceof ApiError) {
         setError(err.message);

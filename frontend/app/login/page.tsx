@@ -21,7 +21,7 @@ export default function LoginPage() {
 
   // Si déjà connecté, rediriger direct vers le dashboard
   useEffect(() => {
-    if (isHydrated && accessToken) router.replace('/');
+    if (isHydrated && accessToken) router.replace('/dashboard');
   }, [isHydrated, accessToken, router]);
 
   const onSubmit = async (e: React.FormEvent) => {
@@ -39,7 +39,7 @@ export default function LoginPage() {
         refreshToken: data.refreshToken,
         user: data.user,
       });
-      router.replace('/');
+      router.replace('/dashboard');
     } catch (err: any) {
       if (err instanceof ApiError) {
         setError(

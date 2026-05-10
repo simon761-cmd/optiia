@@ -9,7 +9,7 @@ import { AuthGuard } from '@/components/auth/AuthGuard';
 import { useAuthStore } from '@/lib/auth-store';
 
 const NAV_ITEMS = [
-  { href: '/', label: 'Tableau de bord', icon: LayoutDashboard },
+  { href: '/dashboard', label: 'Tableau de bord', icon: LayoutDashboard },
   { href: '/clients', label: 'Clients', icon: Users },
   { href: '/ventes', label: 'Ventes', icon: ShoppingBag },
   { href: '/produits', label: 'Produits', icon: Package, disabled: true },
